@@ -527,17 +527,35 @@ export class PvPRoom extends Room<PvPRoomState> {
 
   private loadDefHeroesData(): any {
     try {
-      const configPath = path.join(__dirname, '../config/DefenderHeroes.json');
+      // Try multiple possible paths for DefenderHeroes.json
+      const possiblePaths = [
+        path.join(__dirname, '../config/DefenderHeroes.json'),  // Development path
+        path.join(__dirname, '../../config/DefenderHeroes.json'), // Build path
+        path.join(process.cwd(), 'config/DefenderHeroes.json'),   // Current working directory
+        path.join(process.cwd(), 'src/config/DefenderHeroes.json') // Source directory
+      ];
 
-      if (!fs.existsSync(configPath)) {
-        console.error(`DefenderHeroes.json not found at: ${configPath}`);
+      let configPath = null;
+      for (const testPath of possiblePaths) {
+        if (fs.existsSync(testPath)) {
+          configPath = testPath;
+          console.log(`✅ Found DefenderHeroes.json at: ${configPath}`);
+          break;
+        }
+      }
+
+      if (!configPath) {
+        console.error(`DefenderHeroes.json not found in any of these locations:`);
+        possiblePaths.forEach(p => console.error(`  - ${p}`));
+        console.error(`Current working directory: ${process.cwd()}`);
+        console.error(`__dirname: ${__dirname}`);
         return null;
       }
 
       const fileContent = fs.readFileSync(configPath, 'utf8');
       const DefenderHeroes = JSON.parse(fileContent);
 
-      console.log(`✅ Loaded DefenderHeroes data: ${DefenderHeroes.heroes.length || 0} items`);
+      console.log(`✅ Loaded DefenderHeroes data: ${DefenderHeroes.heroes?.length || 0} heroes`);
       return DefenderHeroes;
     } catch (error) {
       console.error('Failed to load DefenderHeroes data:', error);
