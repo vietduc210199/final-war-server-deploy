@@ -7,7 +7,6 @@ Hệ thống PvP multiplayer real-time cho game Last War sử dụng Colyseus se
 
 ### 1. **Install Dependencies**
 ```bash
-cd lw-colyseus-server
 npm install
 ```
 
@@ -30,14 +29,10 @@ Server sẽ chạy tại: `http://localhost:2567`
 
 ### 2. **Add Scripts to Project**
 - Copy `ColyseusManager.cs` vào `Assets/_Project/Scripts/Managers/`
-- Copy `PvPNetworkController.cs` vào `Assets/_Project/Scripts/Managers/`
-- Copy `PvPUIManager.cs` vào `Assets/_Project/Scripts/UI/`
 
 ### 3. **Setup Scene**
 - Tạo PvP scene mới
 - Add `ColyseusManager` prefab
-- Add `PvPNetworkController` prefab
-- Add `PvPUIManager` prefab
 
 ## 🔧 **Cấu trúc hệ thống**
 
@@ -56,110 +51,22 @@ src/
 Scripts/
 ├── Managers/
 │   ├── ColyseusManager.cs      # Network connection
-│   └── PvPNetworkController.cs # Gameplay sync
-└── UI/
-    └── PvPUIManager.cs         # PvP UI
 ```
 
 ## 🎯 **Tính năng PvP**
 
 ### **Game Modes**
 - **2 Player PvP** - Đấu 1v1
-- **Team-based** - Blue vs Red
 - **Real-time** - Đồng bộ hóa real-time
 
 ### **Gameplay Elements**
 - **Player Movement** - Di chuyển real-time
 - **Combat System** - Tấn công, phòng thủ
 - **Soldier Spawning** - Sinh quân
-- **Skill System** - Heal, Boost, Ultimate
-- **Gate System** - Spawn enemies tự động
 
 ### **Win Conditions**
-- **Score Limit** - Đạt 1000 điểm
-- **Time Limit** - 5 phút
-- **Enemy Elimination** - Tiêu diệt hết quân địch
-
-## 📡 **Network Protocol**
-
-### **Client → Server Messages**
-```typescript
-// Player movement
-"playerMove": { x: number, y: number, z: number }
-
-// Player attack
-"playerAttack": { damage: number, range: number }
-
-// Spawn soldier
-"spawnSoldier": { x: number, y: number, z: number }
-
-// Use skill
-"useSkill": { skillType: string }
-
-// Enemy killed
-"enemyKilled": { enemyType: string }
-```
-
-### **Server → Client Messages**
-```typescript
-// Game ended
-"gameEnded": { winner: string, blueScore: number, redScore: number }
-```
-
-## 🎨 **UI Components**
-
-### **Connection Panel**
-- Connect/Disconnect button
-- Join/Leave room buttons
-- Connection status
-
-### **Game Panel**
-- Score display (Blue vs Red)
-- Game timer
-- Player health & score
-- Skill buttons
-
-### **Game End Panel**
-- Winner announcement
-- Final score
-- Return to lobby
-
-## 🚀 **Testing**
-
-### **Local Testing**
-1. Start Colyseus server
-2. Open Unity PvP scene
-3. Click "Connect" → "Join Room"
-4. Open second Unity instance for opponent
-
-### **Network Testing**
-1. Deploy server to cloud
-2. Update server URL in Unity
-3. Test with multiple devices
-
-## 🔧 **Customization**
-
-### **Add New Skills**
-```csharp
-// In PvPRoom.ts
-case "newSkill":
-    // Implement skill logic
-    break;
-```
-
-### **Modify Win Conditions**
-```csharp
-// In PvPRoom.ts
-private checkWinConditions() {
-    // Add custom win logic
-}
-```
-
-### **Add New Enemy Types**
-```csharp
-// In PvPRoomState.ts
-@type("string") enemyType: string = "grunt";
-```
+- **Time Limit** - 1 phút 30 giây
+- **Enemy Elimination** - Tiêu diệt hết quân phòng thủ
 
 ## 📱 **Performance Tips**
 

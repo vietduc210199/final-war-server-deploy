@@ -6,12 +6,17 @@ import * as path from 'path';
 export class PvPRoom extends Room<PvPRoomState> {
   maxClients = 2;
   private levelData: any = null;
+  private defHeroesData: any = null;
   private gateCycleInterval: NodeJS.Timeout | null = null;
 
   onCreate(options: any) {
     console.log("PvP Room created:", this.roomId);
     this.state = new PvPRoomState();
     this.levelData = this.loadLevelData();
+    // Load Hero data from HeroPVP.json
+    this.defHeroesData = this.loadDefHeroesData();
+
+    // Set up message handlers
     this.setupMessageHandlers();
   }
 
@@ -360,19 +365,24 @@ export class PvPRoom extends Room<PvPRoomState> {
 
   private initializeDefenderData(playerState: PlayerState) {
     // Initialize default heroes
-    const defaultHeroes = [
-      { heroName: "Mason", hp: 1500, damage: 10 },
-      { heroName: "TankGas", hp: 3000, damage: 20 },
-      { heroName: "CarRocket", hp: 1500, damage: 10 },
-    ];
 
-    defaultHeroes.forEach(heroData => {
-      const hero = new Hero();
-      hero.heroName = heroData.heroName;
-      hero.hp = heroData.hp;
-      hero.damage = heroData.damage;
-      playerState.heroes.push(hero);
-    });
+    if (this.defHeroesData) {
+      this.defHeroesData.heroes.forEach((heroData: any) => {
+        const hero = new Hero();
+        hero.heroName = heroData.heroName;
+        hero.hp = heroData.hp;
+        hero.damage = heroData.damage;
+        playerState.heroes.push(hero);
+
+        this.addHeroToDefender(playerState, {
+          heroName: heroData.heroName,
+          hp: heroData.hp,
+          damage: heroData.damage,
+        });
+      });
+    } else {
+      console.error("Defender heroes data not found.");
+    }
 
     console.log(`Initialized ${playerState.heroes.length} heroes and ${playerState.defenderTroops.length} defender troops for player ${playerState.name}`);
   }
@@ -514,6 +524,27 @@ export class PvPRoom extends Room<PvPRoomState> {
       return null;
     }
   }
+
+  private loadDefHeroesData(): any {
+    try {
+      const configPath = path.join(__dirname, '../config/DefenderHeroes.json');
+
+      if (!fs.existsSync(configPath)) {
+        console.error(`DefenderHeroes.json not found at: ${configPath}`);
+        return null;
+      }
+
+      const fileContent = fs.readFileSync(configPath, 'utf8');
+      const DefenderHeroes = JSON.parse(fileContent);
+
+      console.log(`✅ Loaded DefenderHeroes data: ${DefenderHeroes.heroes.length || 0} items`);
+      return DefenderHeroes;
+    } catch (error) {
+      console.error('Failed to load DefenderHeroes data:', error);
+      return null;
+    }
+  }
+
   private startGateCycle() {
     let isUp = false;
 
@@ -544,4 +575,23 @@ export class PvPRoom extends Room<PvPRoomState> {
       console.log("Gate cycle stopped");
     }
   }
+
+  private addHeroToDefender(playerState: PlayerState, heroData: { heroName: string; hp: number; damage: number }) {
+    const hero = new Hero();
+    hero.heroName = heroData.heroName;
+    hero.hp = heroData.hp;
+    hero.damage = heroData.damage;
+    playerState.heroes.push(hero);
+
+    this.broadcast("DefenderHeroAdded", {
+      PlayerId: playerState.id,
+      HeroName: hero.heroName,
+      HP: hero.hp,
+      Damage: hero.damage,
+      HeroIndex: playerState.heroes.length - 1,
+    });
+
+    console.log(`Hero ${hero.heroName} added for defender ${playerState.name}`);
+  }
+
 }

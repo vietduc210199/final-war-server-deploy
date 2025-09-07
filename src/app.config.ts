@@ -47,15 +47,6 @@ export default config({
             res.send("Last War PvP Server is running!");
         });
 
-        // Health check endpoint
-        app.get("/health", (req, res) => {
-            res.json({ 
-                status: "healthy", 
-                timestamp: new Date().toISOString(),
-                uptime: process.uptime()
-            });
-        });
-
         /**
          * Use @colyseus/playground
          * (It is not recommended to expose this route in a production environment)
@@ -73,8 +64,8 @@ export default config({
     },
 
     beforeListen: () => {
-        console.log(`🚀 Last War PvP Server starting on port ${process.env.PORT || 2567}`);
-        console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`🔗 CORS Origin: ${process.env.CORS_ORIGIN || '*'}`);
+        /**
+         * Before before gameServer.listen() is called.
+         */
     }
 });
