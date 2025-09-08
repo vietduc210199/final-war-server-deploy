@@ -98,7 +98,8 @@ export class PvPRoom extends Room<PvPRoomState> {
       const player = this.state.players.get(client.sessionId);
       if (player) {
         player.isReady = data.isReady;
-        console.log(`Player ${client.sessionId} ready status: ${data.isReady}`);
+        player.name = data.nickname;
+        console.log(`Player ${client.sessionId} ready status: ${data.isReady} with nickname: ${data.nickname}`);
         this.checkAllPlayersReady();
       }
     });
@@ -354,6 +355,11 @@ export class PvPRoom extends Room<PvPRoomState> {
     if (allReady && this.state.players.size === 2) {
       console.log("All players are ready!");
       this.broadcast("allPlayersReady", {
+        players: Array.from(this.state.players.values()).map(p => ({
+          id: p.id,
+          name: p.name,
+          role: p.role
+        })),
         message: "All players are ready to start!"
       });
     }
@@ -579,7 +585,6 @@ export class PvPRoom extends Room<PvPRoomState> {
           isUp: false,
           positionY: -3.25
         });
-
         this.broadcast("GateResetProcessedIds", {});
       }
 
