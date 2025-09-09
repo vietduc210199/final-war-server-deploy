@@ -1,8 +1,9 @@
 {
   "heroes": [
-    { "heroName": "Mason", "hp": 1500, "damage": 10 },
-    { "heroName": "TankGas", "hp": 3000, "damage": 20 },
-    { "heroName": "CarRocket", "hp": 1500, "damage": 10 },
-    { "heroName": "Monica", "hp": 4567, "damage": 10 }
+    { "heroName": "Mason", "hp": 100, "damage": 10 },
+    { "heroName": "TankGas", "hp": 150, "damage": 20 },
+    { "heroName": "CarRocket", "hp": 100, "damage": 10 },
+    { "heroName": "Monica", "hp": 150, "damage": 10 },
+    { "heroName": "AmBolt", "hp": 150, "damage": 10 }
   ]
 }
