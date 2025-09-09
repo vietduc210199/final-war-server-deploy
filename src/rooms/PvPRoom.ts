@@ -7,14 +7,15 @@ export class PvPRoom extends Room<PvPRoomState> {
   maxClients = 2;
   private levelData: any = null;
   private defHeroesData: any = null;
+  private attackersData: any = null;
   private gateCycleInterval: NodeJS.Timeout | null = null;
 
   onCreate(options: any) {
     console.log("PvP Room created:", this.roomId);
     this.state = new PvPRoomState();
     this.levelData = this.loadLevelData();
-    // Load Hero data from HeroPVP.json
     this.defHeroesData = this.loadDefHeroesData();
+    this.attackersData = this.loadAttackersData();
 
     // Set up message handlers
     this.setupMessageHandlers();
@@ -111,25 +112,30 @@ export class PvPRoom extends Room<PvPRoomState> {
     this.onMessage("AttackerSpawn", (client, data) => {
       const player = this.state.players.get(client.sessionId);
       if (player && player.role === "attacker") {
+        console.log(`Player ${client.sessionId} spawning attacker troop:`, data);
         const validation = this.validateAttackerSpawn(data);
         if (!validation.isValid) {
           this.sendError(client, "INVALID_ATTACKER_SPAWN", validation.errorMessage, "AttackerSpawn");
           return;
         }
 
-        console.log(`Player ${client.sessionId} spawning attacker troop:`, data);
+        const dataAttacker = this.attackersData.attackers.find((attacker: any) => attacker.attackerId === data.AttackerId);
+        if(!dataAttacker) {
+          this.sendError(client, "INVALID_ATTACKER_ID", "Invalid attacker ID", "AttackerSpawn");
+          return;
+        }
         const newTroop = new AttackerTroop();
-        newTroop.isBoss = data.IsBoss;
-        newTroop.hp = data.HP;
-        newTroop.damage = data.Damage;
+        newTroop.isBoss = dataAttacker.isBoss;
+        newTroop.hp = dataAttacker.hp;
+        newTroop.damage = dataAttacker.damage;
 
         player.attackerTroops.push(newTroop);
         this.broadcast("AttackerTroopSpawned", {
           PlayerId: client.sessionId,
           PositionX: data.PositionX,
-          IsBoss: data.IsBoss,
-          HP: data.HP,
-          Damage: data.Damage,
+          IsBoss: dataAttacker.isBoss,
+          HP: dataAttacker.hp,
+          Damage: dataAttacker.damage,
           TroopIndex: player.attackerTroops.length - 1,
           TroopId: data.TroopId || player.attackerTroops.length - 1
         });
@@ -239,6 +245,10 @@ export class PvPRoom extends Room<PvPRoomState> {
       } else {
         this.sendError(client, "PLAYER_NOT_FOUND", "Player not found in room", "DefenderTakeDamage");
       }
+    });
+
+    this.onMessage("playerDefItemEvent", (client, data) => {
+      this.sendInfoItemEvent(data.index, data.id, data.numSolider);
     });
   }
 
@@ -393,6 +403,15 @@ export class PvPRoom extends Room<PvPRoomState> {
     console.log(`Initialized ${playerState.heroes.length} heroes and ${playerState.defenderTroops.length} defender troops for player ${playerState.name}`);
   }
 
+  private sendInfoItemEvent(index : number, id: number, numSolider: number) {
+    this.clients.forEach(client => {
+      const player = this.state.players.get(client.sessionId);
+      if (player && player.role === "attacker") {
+        this.broadcast("syncItemEvent", { index: index, id: id, numSolider: numSolider})
+      }
+    });;
+  }
+
   // Validation Methods
   private validateAttackerSpawn(data: any): { isValid: boolean; errorMessage: string } {
     if (typeof data.PositionX !== 'number' || data.PositionX < -100 || data.PositionX > 100) {
@@ -400,12 +419,6 @@ export class PvPRoom extends Room<PvPRoomState> {
     }
     if (typeof data.IsBoss !== 'boolean') {
       return { isValid: false, errorMessage: "IsBoss must be a boolean" };
-    }
-    if (typeof data.HP !== 'number' || data.HP <= 0 || data.HP > 1000) {
-      return { isValid: false, errorMessage: "HP must be a number between 1 and 1000" };
-    }
-    if (typeof data.Damage !== 'number' || data.Damage <= 0 || data.Damage > 500) {
-      return { isValid: false, errorMessage: "Damage must be a number between 1 and 500" };
     }
     return { isValid: true, errorMessage: "" };
   }
@@ -471,6 +484,7 @@ export class PvPRoom extends Room<PvPRoomState> {
       this.levelData.items.forEach((item: any) => {
         setTimeout(() => {
           this.broadcast("SpawnItem", {
+            index: item.i,
             itemId: item.id,
             position: {
               x: item.x,
@@ -565,6 +579,45 @@ export class PvPRoom extends Room<PvPRoomState> {
       return DefenderHeroes;
     } catch (error) {
       console.error('Failed to load DefenderHeroes data:', error);
+      return null;
+    }
+  }
+
+  private loadAttackersData(): any {
+    try {
+      // Try multiple possible paths for Atackers.json
+      const possiblePaths = [
+        path.join(__dirname, '../config/Atackers.json'),  // Development path
+        path.join(__dirname, '../../config/Atackers.json'), // Build path
+        path.join(process.cwd(), 'config/Atackers.json'),   // Current working directory
+        path.join(process.cwd(), 'src/config/Atackers.json') // Source directory
+      ];
+
+      let configPath = null;
+      for (const testPath of possiblePaths) {
+        if (fs.existsSync(testPath)) {
+          configPath = testPath;
+          console.log(`✅ Found Atackers.json at: ${configPath}`);
+          break;
+        }
+      }
+
+      if (!configPath) {
+        console.error(`Atackers.json not found in any of these locations:`);
+        possiblePaths.forEach(p => console.error(`  - ${p}`));
+        console.error(`Current working directory: ${process.cwd()}`);
+        console.error(`__dirname: ${__dirname}`);
+        return null;
+      }
+
+      const fileContent = fs.readFileSync(configPath, 'utf8');
+      const Atackers = JSON.parse(fileContent);
+
+      console.log(`✅ Loaded Atackers data: ${Atackers.attackers?.length || 0} attackers`);
+      console.log("✅ Loaded Atackers data:", Atackers.attackers[0] || 0);
+      return Atackers;
+    } catch (error) {
+      console.error('Failed to load Atackers data:', error);
       return null;
     }
   }
