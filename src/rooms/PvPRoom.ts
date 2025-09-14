@@ -1,24 +1,27 @@
 import { Room, Client } from "@colyseus/core";
 import { PvPRoomState, PlayerState, AttackerTroop, Hero, DefenderTroop } from "./schema/PvPRoomState";
+import { MESSAGE_CODES, broadcastCodedMessage, MAIN_CODES_STRING} from "./MessageCodes";
 import * as fs from 'fs';
 import * as path from 'path';
 
 export class PvPRoom extends Room<PvPRoomState> {
   maxClients = 2;
+  maxMapId = 3;
   private levelData: any = null;
   private defHeroesData: any = null;
   private attackersData: any = null;
   private gateCycleInterval: NodeJS.Timeout | null = null;
 
   onCreate(options: any) {
-    console.log("PvP Room created:", this.roomId);
     this.state = new PvPRoomState();
+    this.state.mapId = Math.floor(Math.random() * this.maxMapId) + 1;
     this.levelData = this.loadLevelData();
     this.defHeroesData = this.loadDefHeroesData();
     this.attackersData = this.loadAttackersData();
 
     // Set up message handlers
     this.setupMessageHandlers();
+    console.log("PvP Room created:", this.roomId, "Map ID:", this.state.mapId);
   }
 
   onJoin(client: Client, options: any) {
@@ -95,14 +98,9 @@ export class PvPRoom extends Room<PvPRoomState> {
   }
 
   private setupMessageHandlers() {
-    this.onMessage("playerReady", (client, data) => {
-      const player = this.state.players.get(client.sessionId);
-      if (player) {
-        player.isReady = data.isReady;
-        player.name = data.nickname;
-        console.log(`Player ${client.sessionId} ready status: ${data.isReady} with nickname: ${data.nickname}`);
-        this.checkAllPlayersReady();
-      }
+
+    this.onMessage(MAIN_CODES_STRING.PVP, (client, message) => {
+      this.handleCodedMessage(client, message);
     });
 
     this.onMessage("AllDefenderDead", (client, data) => {
@@ -128,6 +126,7 @@ export class PvPRoom extends Room<PvPRoomState> {
         newTroop.isBoss = dataAttacker.isBoss;
         newTroop.hp = dataAttacker.hp;
         newTroop.damage = dataAttacker.damage;
+        newTroop.damageToBox = dataAttacker.damageToBox;
 
         player.attackerTroops.push(newTroop);
         this.broadcast("AttackerTroopSpawned", {
@@ -136,6 +135,7 @@ export class PvPRoom extends Room<PvPRoomState> {
           IsBoss: dataAttacker.isBoss,
           HP: dataAttacker.hp,
           Damage: dataAttacker.damage,
+          DamageToBox: dataAttacker.damageToBox,
           TroopIndex: player.attackerTroops.length - 1,
           TroopId: data.TroopId || player.attackerTroops.length - 1
         });
@@ -347,7 +347,6 @@ export class PvPRoom extends Room<PvPRoomState> {
     
     this.stopGateCycle();
     
-    // Auto dispose room after battle ends
     console.log("Auto disposing room after battle end...");
     setTimeout(() => {
       this.disconnect();
@@ -363,8 +362,7 @@ export class PvPRoom extends Room<PvPRoomState> {
     });
 
     if (allReady && this.state.players.size === 2) {
-      console.log("All players are ready!");
-      this.broadcast("allPlayersReady", {
+      broadcastCodedMessage(this, MESSAGE_CODES.PVP, MESSAGE_CODES.PVP_TO_CLIENT.ALL_PLAYERS_READY, {
         players: Array.from(this.state.players.values()).map(p => ({
           id: p.id,
           name: p.name,
@@ -407,7 +405,7 @@ export class PvPRoom extends Room<PvPRoomState> {
     this.clients.forEach(client => {
       const player = this.state.players.get(client.sessionId);
       if (player && player.role === "attacker") {
-        this.broadcast("syncItemEvent", { index: index, id: id, numSolider: numSolider})
+        this.broadcast("syncItemEvent", { index: index, id: id, numSolider: numSolider })
       }
     });;
   }
@@ -631,7 +629,7 @@ export class PvPRoom extends Room<PvPRoomState> {
       if (isUp) {
         this.broadcast("GateStateChanged", {
           isUp: true,
-          positionY: 0.5
+          positionY: 0
         });
       } else {
         this.broadcast("GateStateChanged", {
@@ -670,4 +668,34 @@ export class PvPRoom extends Room<PvPRoomState> {
     console.log(`Hero ${hero.heroName} added for defender ${playerState.name}`);
   }
 
+  private handleCodedMessage(client: Client, message: any) {
+    const { main_code, sub_code, data } = message;    
+    switch (main_code) {
+      case MESSAGE_CODES.PVP:
+        this.handleRoomPvPMessage(client, sub_code, data);
+        break;
+      default:
+        console.warn(`Unknown main_code: ${main_code}`);
+    }
+  }
+
+  private handleRoomPvPMessage(client: Client, subCode: number, data: any) {
+    switch (subCode) {
+      case MESSAGE_CODES.PVP_FROM_CLIENT.PLAYER_READY:
+        this.handlePlayerReady(client, data);
+        break;
+      default:
+        console.warn(`Unknown ROOM_PVP sub_code: ${subCode}`);
+    }
+  }
+
+  private handlePlayerReady(client: Client, data: any) {
+    const player = this.state.players.get(client.sessionId);
+    if (player) {
+      player.isReady = data.isReady;
+      player.name = data.nickname;
+      console.log(`Player ${client.sessionId} ready status: ${data.isReady} with nickname: ${data.nickname}`);
+      this.checkAllPlayersReady();
+    }
+  }
 }

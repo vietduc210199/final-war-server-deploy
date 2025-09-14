@@ -1,6 +1,20 @@
 {
   "attackers": [
-    { "AttackerName": "SoldierRed", "hp": 30, "damage": 10, "attackerId": 1, "isBoss": false },
-    { "AttackerName": "BossBasketball", "hp": 500, "damage": 10, "attackerId" : 2, "isBoss": true}
+    {
+      "AttackerName": "SoldierRed",
+      "hp": 30,
+      "damage": 10,
+      "damageToBox": 1,
+      "attackerId": 1,
+      "isBoss": false
+    },
+    {
+      "AttackerName": "BossBasketball",
+      "hp": 500,
+      "damage": 10,
+      "damageToBox": 8,
+      "attackerId": 2,
+      "isBoss": true
+    }
   ]
 }

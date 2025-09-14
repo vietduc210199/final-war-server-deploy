@@ -5,6 +5,7 @@ export class AttackerTroop extends Schema {
   @type("boolean") isBoss: boolean = false;
   @type("int32") hp: number = 100;
   @type("int32") damage: number = 10;
+  @type("int32") damageToBox: number = 1;
 }
 
 // Hero Schema (for Defender)
@@ -38,5 +39,6 @@ export class PlayerState extends Schema {
 export class PvPRoomState extends Schema {
   @type("string") gameState: string = "waiting"; // waiting, ready, playing, finished
   @type("int32") maxPlayers: number = 2;
+  @type("int32") mapId: number = 0;
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
 }
