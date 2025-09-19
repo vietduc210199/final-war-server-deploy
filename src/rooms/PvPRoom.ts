@@ -1,20 +1,27 @@
 import { Room, Client } from "@colyseus/core";
 import { PvPRoomState, PlayerState, AttackerTroop, Hero, DefenderTroop } from "./schema/PvPRoomState";
-import { MESSAGE_CODES, broadcastCodedMessage, MAIN_CODES_STRING} from "./MessageCodes";
+import { MESSAGE_CODES, broadcastCodedMessage, MAIN_CODES_STRING } from "./MessageCodes";
 import * as fs from 'fs';
 import * as path from 'path';
 
 export class PvPRoom extends Room<PvPRoomState> {
   maxClients = 2;
-  maxMapId = 3;
+  maxMapId = 2;
   private levelData: any = null;
   private defHeroesData: any = null;
   private attackersData: any = null;
-  private gateCycleInterval: NodeJS.Timeout | null = null;
-
+  private serverTimeInterval: NodeJS.Timeout | null = null;
+  private changeMapTimer: NodeJS.Timeout | null = null;
+  private lastChangeMechanicsIndex: number = 0;
+  private boss30sSent = false;
+  private bossSpawned: boolean = false;
+  private activeBossTroopIndex: number | null = null;
+  private awaitingSkillPoints: boolean = false;
+  private skillPointTimeout: NodeJS.Timeout | null = null;
   onCreate(options: any) {
     this.state = new PvPRoomState();
-    this.state.mapId = Math.floor(Math.random() * this.maxMapId) + 1;
+    // this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
+    this.state.mapId = 0;
     this.levelData = this.loadLevelData();
     this.defHeroesData = this.loadDefHeroesData();
     this.attackersData = this.loadAttackersData();
@@ -70,7 +77,7 @@ export class PvPRoom extends Room<PvPRoomState> {
     if (this.state.players.size < 2) {
       this.state.gameState = "waiting";
       console.log("Game reset to waiting state - not enough players");
-      
+
       // Auto dispose room when player leaves during game
       if (this.state.players.size === 0) {
         console.log("No players left, disposing room...");
@@ -83,17 +90,22 @@ export class PvPRoom extends Room<PvPRoomState> {
 
   onDispose() {
     console.log("PvP Room disposing:", this.roomId);
-    
+
     if (this.battleTimer) {
       clearInterval(this.battleTimer);
       this.battleTimer = null;
       console.log("Battle timer cleared on dispose");
     }
-    
-    if (this.gateCycleInterval) {
-      clearInterval(this.gateCycleInterval);
-      this.gateCycleInterval = null;
-      console.log("Gate cycle timer cleared on dispose");
+
+    if (this.serverTimeInterval) {
+      clearInterval(this.serverTimeInterval);
+      this.serverTimeInterval = null;
+    }
+
+    if (this.changeMapTimer) {
+      clearInterval(this.changeMapTimer);
+      this.changeMapTimer = null;
+      console.log("Change map timer cleared on dispose");
     }
   }
 
@@ -108,6 +120,10 @@ export class PvPRoom extends Room<PvPRoomState> {
     });
 
     this.onMessage("AttackerSpawn", (client, data) => {
+      console.log("[qqqqqqqqqqqqqqqqqqqqqqqqqqq]")
+      if (this.bossSpawned) {
+        return;
+      }
       const player = this.state.players.get(client.sessionId);
       if (player && player.role === "attacker") {
         console.log(`Player ${client.sessionId} spawning attacker troop:`, data);
@@ -118,12 +134,13 @@ export class PvPRoom extends Room<PvPRoomState> {
         }
 
         const dataAttacker = this.attackersData.attackers.find((attacker: any) => attacker.attackerId === data.AttackerId);
-        if(!dataAttacker) {
+        if (!dataAttacker) {
           this.sendError(client, "INVALID_ATTACKER_ID", "Invalid attacker ID", "AttackerSpawn");
           return;
         }
         const newTroop = new AttackerTroop();
         newTroop.isBoss = dataAttacker.isBoss;
+        newTroop.attackerId = dataAttacker.attackerId;
         newTroop.hp = dataAttacker.hp;
         newTroop.damage = dataAttacker.damage;
         newTroop.damageToBox = dataAttacker.damageToBox;
@@ -133,6 +150,7 @@ export class PvPRoom extends Room<PvPRoomState> {
           PlayerId: client.sessionId,
           PositionX: data.PositionX,
           IsBoss: dataAttacker.isBoss,
+          AttackerId: dataAttacker.attackerId,
           HP: dataAttacker.hp,
           Damage: dataAttacker.damage,
           DamageToBox: dataAttacker.damageToBox,
@@ -250,6 +268,60 @@ export class PvPRoom extends Room<PvPRoomState> {
     this.onMessage("playerDefItemEvent", (client, data) => {
       this.sendInfoItemEvent(data.index, data.id, data.numSolider);
     });
+
+    this.onMessage("BossDied", (client, data) => {
+      try {
+        if (!this.bossSpawned) return;
+        const isBoss = !!data?.IsBoss;
+        const troopIndex = typeof data?.troopId === 'number' ? data.troopId : -1;
+
+        const matches = (this.activeBossTroopIndex !== null && troopIndex === this.activeBossTroopIndex) || isBoss;
+
+        if (matches && this.state.gameState === "playing") {
+          console.log(`[BossDeath] Reported by ${client.sessionId}. Finishing with Defender victory.`);
+          this.endBattleBossKilled();
+        }
+      } catch (e) {
+        console.warn("AttackerTroopDead handler error:", e);
+      }
+    });
+
+    this.onMessage("playerDefTriggerSkill", (client, data) => {
+      this.broadcast("OnTriggerDefenderSkill", { posX: data.posX });
+    });
+
+    this.onMessage("ReportSkillBarPoints", (client, data) => {
+      try {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || player.role !== "attacker") return;
+        if (!this.awaitingSkillPoints || this.state.gameState !== "playing") return;
+
+        const bossConfig = this.attackersData?.attackers?.find((a: any) => a.isBoss);
+        if (!bossConfig) {
+          console.warn("[ReportSkillBarPoints] No boss config.");
+          return;
+        }
+
+        const currentPoints = Math.max(0, Number(data?.currentPoints ?? 0));
+        // Anti-cheat
+        const safePoints = Math.min(currentPoints, 2000);
+
+        const mtp = typeof bossConfig.mtp === "number" ? bossConfig.mtp : 10;
+        const computedHp = bossConfig.hp + mtp * safePoints;
+
+        if (this.skillPointTimeout) {
+          clearTimeout(this.skillPointTimeout);
+          this.skillPointTimeout = null;
+        }
+        this.awaitingSkillPoints = false;
+
+        console.log(`[BossFlow] points=${safePoints}, mtp=${mtp} → bossHp=${computedHp}`);
+        this.spawnServerBoss(computedHp);
+      } catch (e) {
+        console.warn("ReportSkillBarPoints handler error:", e);
+      }
+    });
+
   }
 
   private prepareGame() {
@@ -283,6 +355,10 @@ export class PvPRoom extends Room<PvPRoomState> {
   private startGame() {
     console.log("Starting PvP game! Both players joined.");
     this.state.gameState = "playing";
+    this.boss30sSent = false;
+    this.bossSpawned = false;
+    this.activeBossTroopIndex = null;
+
     this.broadcast("gameStarted", {
       message: "Game started! Attacker vs Defender",
       players: Array.from(this.state.players.values()).map(p => ({
@@ -294,15 +370,20 @@ export class PvPRoom extends Room<PvPRoomState> {
 
     this.startLevelSpawnSystem();
     this.startBattleTimer();
-    this.startGateCycle();
+    // this.startChangeMapTimer();
+    this.sendServerTime();
+    this.startChangeMechanicsTimer();
+    this.playIntervalDefSkill();
   }
 
   private battleTimer: NodeJS.Timeout | null = null;
+  private changeMechanicsTimer: NodeJS.Timeout | null = null;
+  private defSkillTimer: NodeJS.Timeout | null = null;
 
   private startBattleTimer() {
     console.log("Starting battle timer: 90 seconds");
-    let timeLeft = 90; // 90 seconds battle time
-
+    let timeLeft = 105; // 90 seconds battle time
+    const bossTriggerAt = 45; // 30 seconds before boss spawn
     // Send initial time
     this.broadcast("battleTimeCountdown", {
       timeLeft: timeLeft,
@@ -325,6 +406,12 @@ export class PvPRoom extends Room<PvPRoomState> {
         message: `Battle time: ${timeLeft} seconds remaining`
       });
 
+      if (!this.boss30sSent && timeLeft === bossTriggerAt && this.state.gameState === "playing") {
+        this.boss30sSent = true;
+        this.requestAttackerSkillPointsAndSpawnBoss();
+        console.log("🔥 Boss zombie trigger sent at 30s left");
+
+      }
       console.log(`Battle time remaining: ${timeLeft} seconds`);
     }, 1000);
   }
@@ -332,21 +419,30 @@ export class PvPRoom extends Room<PvPRoomState> {
   private endBattle(isTimeout: boolean = false) {
     console.log("Battle time ended!");
     this.state.gameState = "finished";
+    this.bossSpawned = false;
+
     this.broadcast("battleEnded", {
       message: "Battle time ended!",
       reason: isTimeout ? "timeout" : "all defender dead",
       playerType: isTimeout ? 1 : 0
     });
-    
+
     // Clear battle timer
     if (this.battleTimer) {
       clearInterval(this.battleTimer);
       this.battleTimer = null;
       console.log("Battle timer cleared");
     }
-    
-    this.stopGateCycle();
-    
+
+    // Clear change map timer
+    if (this.changeMapTimer) {
+      clearInterval(this.changeMapTimer);
+      this.changeMapTimer = null;
+      console.log("Change map timer cleared");
+    }
+
+    this.stopSendServerTime();
+
     console.log("Auto disposing room after battle end...");
     setTimeout(() => {
       this.disconnect();
@@ -401,7 +497,7 @@ export class PvPRoom extends Room<PvPRoomState> {
     console.log(`Initialized ${playerState.heroes.length} heroes and ${playerState.defenderTroops.length} defender troops for player ${playerState.name}`);
   }
 
-  private sendInfoItemEvent(index : number, id: number, numSolider: number) {
+  private sendInfoItemEvent(index: number, id: number, numSolider: number) {
     this.clients.forEach(client => {
       const player = this.state.players.get(client.sessionId);
       if (player && player.role === "attacker") {
@@ -508,11 +604,13 @@ export class PvPRoom extends Room<PvPRoomState> {
   private loadLevelData(): any {
     try {
       // Try multiple possible paths for LevelPVP.json
+      let nameLevels = `LevelPVP_${this.state.mapId}.json`;
+      console.log("PVP Room: " + nameLevels);
       const possiblePaths = [
-        path.join(__dirname, '../config/LevelPVP.json'),  // Development path
-        path.join(__dirname, '../../config/LevelPVP.json'), // Build path
-        path.join(process.cwd(), 'config/LevelPVP.json'),   // Current working directory
-        path.join(process.cwd(), 'src/config/LevelPVP.json') // Source directory
+        path.join(__dirname, `../config/${nameLevels}`),  // Development path
+        path.join(__dirname, `../../config/${nameLevels}`), // Build path
+        path.join(process.cwd(), `config/${nameLevels}`),   // Current working directory
+        path.join(process.cwd(), `src/config/${nameLevels}`) // Source directory
       ];
 
       let configPath = null;
@@ -536,6 +634,13 @@ export class PvPRoom extends Room<PvPRoomState> {
       const levelData = JSON.parse(fileContent);
 
       console.log(`✅ Loaded LevelPVP data: ${levelData.items?.length || 0} items`);
+
+      if (levelData.mechanics && levelData.mechanics.length > 0) {
+        for (const mechanic of levelData.mechanics) {
+          mechanic.currentMechanics = 0;
+        }
+      }
+
       return levelData;
     } catch (error) {
       console.error('Failed to load LevelPVP data:', error);
@@ -620,34 +725,88 @@ export class PvPRoom extends Room<PvPRoomState> {
     }
   }
 
-  private startGateCycle() {
-    let isUp = false;
-
-    this.gateCycleInterval = setInterval(() => {
-      isUp = !isUp;
-
-      if (isUp) {
-        this.broadcast("GateStateChanged", {
-          isUp: true,
-          positionY: 0
-        });
-      } else {
-        this.broadcast("GateStateChanged", {
-          isUp: false,
-          positionY: -3.25
-        });
-        this.broadcast("GateResetProcessedIds", {});
-      }
-
-    }, 2500);
+  private sendServerTime() {
+    let serverTime = Date.now();
+    this.broadcast("GetServerTime", { serverTime });
+    this.serverTimeInterval = setInterval(() => {
+      serverTime = Date.now();
+      this.broadcast("GetServerTime", { serverTime });
+    }, 2000);
   }
 
-  private stopGateCycle() {
-    if (this.gateCycleInterval) {
-      clearInterval(this.gateCycleInterval);
-      this.gateCycleInterval = null;
-      console.log("Gate cycle stopped");
+  private stopSendServerTime() {
+    if (this.serverTimeInterval) {
+      clearInterval(this.serverTimeInterval);
+      this.serverTimeInterval = null;
     }
+  }
+
+  private startChangeMapTimer() {
+
+    this.changeMapTimer = setInterval(() => {
+      this.changeMap();
+    }, 30000);
+  }
+
+  private startChangeMechanicsTimer() {
+    this.changeMechanicsTimer = setInterval(() => {
+      this.changeMechanics();
+    }, 10000);
+  }
+
+  private playIntervalDefSkill() {
+    this.defSkillTimer = setInterval(() => {
+      this.broadcast("OnTriggerDefenderSkill", { posX: 0 });
+    }, 10000);
+  }
+
+  private changeMechanics() {
+    if (this.state.gameState !== "playing") {
+      return;
+    }
+
+    if (this.levelData.mechanics) {
+
+      let randomMechanicsIndex = this.lastChangeMechanicsIndex;
+      do {
+        randomMechanicsIndex = Math.floor(Math.random() * (this.levelData.mechanics.length));
+      } while (randomMechanicsIndex === this.lastChangeMechanicsIndex);
+
+      this.lastChangeMechanicsIndex = randomMechanicsIndex;
+
+      let randomNewMechanicsIndex = 0;
+      do {
+        randomNewMechanicsIndex = Math.floor(Math.random() * (this.levelData.mechanics[randomMechanicsIndex].num));
+      } while (randomNewMechanicsIndex == this.levelData.mechanics[randomMechanicsIndex].currentMechanics);
+
+      this.levelData.mechanics[randomMechanicsIndex].currentMechanics = randomNewMechanicsIndex;
+
+      console.log(`Changing mechanics index ${randomMechanicsIndex} to ${randomNewMechanicsIndex}`);
+      this.broadcast("ChangeMechanics", {
+        idMechanics: randomMechanicsIndex,
+        idNewMechanics: randomNewMechanicsIndex
+      });
+    }
+  }
+
+  private changeMap() {
+    if (this.state.gameState !== "playing") {
+      return;
+    }
+
+    const oldMapId = this.state.mapId;
+    let newMapId: number;
+
+    do {
+      newMapId = Math.floor(Math.random() * (this.maxMapId + 1));
+    } while (newMapId === oldMapId);
+
+    this.state.mapId = newMapId;
+
+    console.log(`Changing map from ${oldMapId} to ${newMapId}`);
+    this.broadcast("ChangeMapPVP", {
+      newMapId: newMapId
+    });
   }
 
   private addHeroToDefender(playerState: PlayerState, heroData: { heroName: string; hp: number; damage: number }) {
@@ -669,7 +828,7 @@ export class PvPRoom extends Room<PvPRoomState> {
   }
 
   private handleCodedMessage(client: Client, message: any) {
-    const { main_code, sub_code, data } = message;    
+    const { main_code, sub_code, data } = message;
     switch (main_code) {
       case MESSAGE_CODES.PVP:
         this.handleRoomPvPMessage(client, sub_code, data);
@@ -698,4 +857,107 @@ export class PvPRoom extends Room<PvPRoomState> {
       this.checkAllPlayersReady();
     }
   }
-}
+
+  private spawnServerBoss(overrideHp?: number) {
+    if (this.bossSpawned) {
+      console.warn("[spawnServerBoss] Boss already active.");
+      return;
+    }
+
+    const attackerPlayer = Array.from(this.state.players.values()).find(p => p.role === "attacker");
+    if (!attackerPlayer) {
+      console.warn("[spawnServerBoss] No attacker player present.");
+      return;
+    }
+
+    const bossConfig = this.attackersData?.attackers?.find((a: any) => a.isBoss);
+    if (!bossConfig) {
+      console.warn("[spawnServerBoss] No boss found in attackersData.attackers (isBoss=true).");
+      return;
+    }
+
+    const newTroop = new AttackerTroop();
+    newTroop.isBoss = true;
+    newTroop.attackerId = bossConfig.attackerId;
+    newTroop.damage = bossConfig.damage;
+    newTroop.damageToBox = bossConfig.damageToBox;
+    newTroop.hp = typeof overrideHp === "number" ? overrideHp : bossConfig.hp;
+
+    attackerPlayer.attackerTroops.push(newTroop);
+    const troopIndex = attackerPlayer.attackerTroops.length - 1;
+
+    const positionX = 0;
+
+    this.broadcast("AttackerTroopSpawned", {
+      PlayerId: attackerPlayer.id,
+      PositionX: positionX,
+      IsBoss: true,
+      AttackerId: bossConfig.attackerId,
+      HP: newTroop.hp,
+      Damage: bossConfig.damage,
+      DamageToBox: bossConfig.damageToBox,
+      TroopIndex: troopIndex,
+      TroopId: troopIndex
+    });
+
+    this.bossSpawned = true;
+    this.activeBossTroopIndex = troopIndex;
+
+    console.log(`[spawnServerBoss] Boss spawned with HP=${newTroop.hp} (base=${bossConfig.hp})`);
+  }
+
+
+  private endBattleBossKilled() {
+    console.log("Boss killed! Defender wins.");
+    this.state.gameState = "finished";
+    this.bossSpawned = false;
+    this.activeBossTroopIndex = null;
+
+    this.broadcast("battleEnded", {
+      message: "Boss killed! Defender wins.",
+      reason: "boss killed",
+      playerType: 1 // PlayerType.Defender (Attacker=0, Defender=1)
+    });
+
+    if (this.battleTimer) { clearInterval(this.battleTimer); this.battleTimer = null; }
+    if (this.changeMapTimer) { clearInterval(this.changeMapTimer); this.changeMapTimer = null; }
+    if (this.changeMechanicsTimer) { clearInterval(this.changeMechanicsTimer); this.changeMechanicsTimer = null; }
+    if (this.defSkillTimer) { clearInterval(this.defSkillTimer); this.defSkillTimer = null; }
+    this.stopSendServerTime();
+
+    setTimeout(() => this.disconnect(), 5000);
+  }
+
+  private requestAttackerSkillPointsAndSpawnBoss() {
+    if (this.bossSpawned || this.awaitingSkillPoints) return;
+
+    const attacker = Array.from(this.state.players.values()).find(p => p.role === "attacker");
+    if (!attacker) {
+      console.warn("[BossFlow] No attacker in room; spawn with base HP.");
+      this.spawnServerBoss(); // spawn với base HP
+      return;
+    }
+
+    const bossConfig = this.attackersData?.attackers?.find((a: any) => a.isBoss);
+    if (!bossConfig) {
+      console.warn("[BossFlow] No boss config; aborting boss flow.");
+      return;
+    }
+
+    this.awaitingSkillPoints = true;
+
+    this.broadcast("RequestSkillBarPoints", {
+      requestId: Date.now()
+    });
+
+    // Timeout: nếu không nhận được currentPoints → spawn với base HP
+    this.skillPointTimeout = setTimeout(() => {
+      if (!this.awaitingSkillPoints) return;
+      this.awaitingSkillPoints = false;
+      this.skillPointTimeout = null;
+      console.warn("[BossFlow] Skill points not received in time → spawn with base HP.");
+      this.spawnServerBoss(); // không override HP
+    }, 1500);
+  }
+
+}             

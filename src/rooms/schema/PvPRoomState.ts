@@ -3,6 +3,7 @@ import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 // Attacker Troop Schema
 export class AttackerTroop extends Schema {
   @type("boolean") isBoss: boolean = false;
+  @type("int32") attackerId: number = 0;
   @type("int32") hp: number = 100;
   @type("int32") damage: number = 10;
   @type("int32") damageToBox: number = 1;

@@ -2,7 +2,7 @@
   "attackers": [
     {
       "AttackerName": "SoldierRed",
-      "hp": 30,
+      "hp": 10,
       "damage": 10,
       "damageToBox": 1,
       "attackerId": 1,
@@ -14,7 +14,16 @@
       "damage": 10,
       "damageToBox": 8,
       "attackerId": 2,
-      "isBoss": true
+      "isBoss": false
+    },
+    {
+      "AttackerName": "BossBaseBall",
+      "hp": 5000,
+      "damage": 100,
+      "damageToBox": 5000,
+      "attackerId": 3,
+      "isBoss": true,
+      "mtp": 40
     }
   ]
 }
