@@ -20,8 +20,8 @@ export class PvPRoom extends Room<PvPRoomState> {
   private skillPointTimeout: NodeJS.Timeout | null = null;
   onCreate(options: any) {
     this.state = new PvPRoomState();
-    // this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
-    this.state.mapId = 0;
+    this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
+    // this.state.mapId = 0;
     this.levelData = this.loadLevelData();
     this.defHeroesData = this.loadDefHeroesData();
     this.attackersData = this.loadAttackersData();
@@ -959,5 +959,4 @@ export class PvPRoom extends Room<PvPRoomState> {
       this.spawnServerBoss(); // không override HP
     }, 1500);
   }
-
 }             
