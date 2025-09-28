@@ -1,8 +1,8 @@
 {
   "heroes": [
     { "heroName": "Mason", "hp": 100, "damage": 10 },
-    { "heroName": "Violet", "hp": 150, "damage": 20 },
-    { "heroName": "Farhad", "hp": 100, "damage": 10 },
+    { "heroName": "TankGas", "hp": 150, "damage": 20 },
+    { "heroName": "CarRocket", "hp": 100, "damage": 10 },
     { "heroName": "Monica", "hp": 150, "damage": 10 },
     { "heroName": "AmBolt", "hp": 150, "damage": 10 }
   ]
