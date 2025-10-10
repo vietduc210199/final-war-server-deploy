@@ -6,7 +6,7 @@ import * as path from 'path';
 
 export class PvPRoom extends Room<PvPRoomState> {
   maxClients = 2;
-  maxMapId = 2;
+  maxMapId = 4;
   private levelData: any = null;
   private defHeroesData: any = null;
   private attackersData: any = null;
@@ -21,7 +21,7 @@ export class PvPRoom extends Room<PvPRoomState> {
   onCreate(options: any) {
     this.state = new PvPRoomState();
     this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
-    // this.state.mapId = 0;
+    // this.state.mapId = 5;
     this.levelData = this.loadLevelData();
     this.defHeroesData = this.loadDefHeroesData();
     this.attackersData = this.loadAttackersData();
@@ -263,6 +263,15 @@ export class PvPRoom extends Room<PvPRoomState> {
       } else {
         this.sendError(client, "PLAYER_NOT_FOUND", "Player not found in room", "DefenderTakeDamage");
       }
+    });
+
+    this.onMessage("AttackerSpawnElite", (client, data) => {
+      this.clients.forEach(client => {
+        const player = this.state.players.get(client.sessionId);
+        if (player && player.role === "defender") {
+          this.broadcast("OnDefenderSpawnElite");
+        }
+      });;
     });
 
     this.onMessage("playerDefItemEvent", (client, data) => {
