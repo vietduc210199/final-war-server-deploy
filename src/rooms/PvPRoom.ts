@@ -21,7 +21,7 @@ export class PvPRoom extends Room<PvPRoomState> {
   onCreate(options: any) {
     this.state = new PvPRoomState();
     this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
-    // this.state.mapId = 5;
+    this.state.mapId = 5;
     this.levelData = this.loadLevelData();
     this.defHeroesData = this.loadDefHeroesData();
     this.attackersData = this.loadAttackersData();
