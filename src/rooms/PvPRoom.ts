@@ -6,7 +6,7 @@ import * as path from 'path';
 
 export class PvPRoom extends Room<PvPRoomState> {
   maxClients = 2;
-  maxMapId = 4;
+  maxMapId = 8;
   private levelData: any = null;
   private defHeroesData: any = null;
   private attackersData: any = null;
@@ -20,8 +20,9 @@ export class PvPRoom extends Room<PvPRoomState> {
   private skillPointTimeout: NodeJS.Timeout | null = null;
   onCreate(options: any) {
     this.state = new PvPRoomState();
-    this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
-    this.state.mapId = 5;
+    // this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
+    const randomValues = [6, 7, 8];
+    this.state.mapId = randomValues[Math.floor(Math.random() * randomValues.length)];;
     this.levelData = this.loadLevelData();
     this.defHeroesData = this.loadDefHeroesData();
     this.attackersData = this.loadAttackersData();
