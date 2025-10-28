@@ -6,7 +6,7 @@ import * as path from 'path';
 
 export class PvPRoom extends Room<PvPRoomState> {
   maxClients = 2;
-  maxMapId = 8;
+  maxMapId = 4;
   private levelData: any = null;
   private defHeroesData: any = null;
   private attackersData: any = null;
@@ -18,11 +18,11 @@ export class PvPRoom extends Room<PvPRoomState> {
   private activeBossTroopIndex: number | null = null;
   private awaitingSkillPoints: boolean = false;
   private skillPointTimeout: NodeJS.Timeout | null = null;
+  private listNameHeroDef: string[] = [];
   onCreate(options: any) {
     this.state = new PvPRoomState();
-    // this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
-    const randomValues = [6, 7, 8];
-    this.state.mapId = randomValues[Math.floor(Math.random() * randomValues.length)];;
+    this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
+    // this.state.mapId = 5;
     this.levelData = this.loadLevelData();
     this.defHeroesData = this.loadDefHeroesData();
     this.attackersData = this.loadAttackersData();
@@ -484,27 +484,30 @@ export class PvPRoom extends Room<PvPRoomState> {
   }
 
   private initializeDefenderData(playerState: PlayerState) {
-    // Initialize default heroes
-
-    if (this.defHeroesData) {
-      this.defHeroesData.heroes.forEach((heroData: any) => {
-        const hero = new Hero();
-        hero.heroName = heroData.heroName;
-        hero.hp = heroData.hp;
-        hero.damage = heroData.damage;
-        playerState.heroes.push(hero);
-
-        this.addHeroToDefender(playerState, {
-          heroName: heroData.heroName,
-          hp: heroData.hp,
-          damage: heroData.damage,
-        });
-      });
-    } else {
-      console.error("Defender heroes data not found.");
-    }
-
     console.log(`Initialized ${playerState.heroes.length} heroes and ${playerState.defenderTroops.length} defender troops for player ${playerState.name}`);
+  }
+
+  private sendHeroesDef(playerState: PlayerState)
+  {
+    if (this.defHeroesData) {
+      this.defHeroesData.heroes
+        .filter((heroData: any) => this.listNameHeroDef.includes(heroData.heroName))
+        .forEach((heroData: any) => {
+          const hero = new Hero();
+          hero.heroName = heroData.heroName;
+          hero.id = heroData.id;
+          hero.hp = heroData.hp;
+          hero.damage = heroData.damage;
+          playerState.heroes.push(hero);
+
+          this.addHeroToDefender(playerState, {
+            heroName: heroData.heroName,
+            id: heroData.id,
+            hp: heroData.hp,
+            damage: heroData.damage,
+          });
+        });
+    }
   }
 
   private sendInfoItemEvent(index: number, id: number, numSolider: number) {
@@ -819,9 +822,10 @@ export class PvPRoom extends Room<PvPRoomState> {
     });
   }
 
-  private addHeroToDefender(playerState: PlayerState, heroData: { heroName: string; hp: number; damage: number }) {
+  private addHeroToDefender(playerState: PlayerState, heroData: { heroName: string; id: number; hp: number; damage: number }) {
     const hero = new Hero();
     hero.heroName = heroData.heroName;
+    hero.id = heroData.id;
     hero.hp = heroData.hp;
     hero.damage = heroData.damage;
     playerState.heroes.push(hero);
@@ -829,12 +833,11 @@ export class PvPRoom extends Room<PvPRoomState> {
     this.broadcast("DefenderHeroAdded", {
       PlayerId: playerState.id,
       HeroName: hero.heroName,
+      Id: hero.id,
       HP: hero.hp,
       Damage: hero.damage,
       HeroIndex: playerState.heroes.length - 1,
     });
-
-    console.log(`Hero ${hero.heroName} added for defender ${playerState.name}`);
   }
 
   private handleCodedMessage(client: Client, message: any) {
@@ -863,7 +866,12 @@ export class PvPRoom extends Room<PvPRoomState> {
     if (player) {
       player.isReady = data.isReady;
       player.name = data.nickname;
+      this.listNameHeroDef = data.listNameHeroDef;
       console.log(`Player ${client.sessionId} ready status: ${data.isReady} with nickname: ${data.nickname}`);
+      if (this.state.players.size == 2)
+      {
+        this.sendHeroesDef(player);
+      }
       this.checkAllPlayersReady();
     }
   }

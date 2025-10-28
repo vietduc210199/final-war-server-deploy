@@ -12,6 +12,7 @@ export class AttackerTroop extends Schema {
 // Hero Schema (for Defender)
 export class Hero extends Schema {
   @type("string") heroName: string = "";
+  @type("int32") id: number = 0;
   @type("int32") hp: number = 200;
   @type("int32") damage: number = 25;
 }
