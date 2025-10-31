@@ -6,7 +6,7 @@ import * as path from 'path';
 
 export class PvPRoom extends Room<PvPRoomState> {
   maxClients = 2;
-  maxMapId = 4;
+  maxMapId = 8;
   private levelData: any = null;
   private defHeroesData: any = null;
   private attackersData: any = null;
@@ -19,6 +19,7 @@ export class PvPRoom extends Room<PvPRoomState> {
   private awaitingSkillPoints: boolean = false;
   private skillPointTimeout: NodeJS.Timeout | null = null;
   private listNameHeroDef: string[] = [];
+  private listIdAttacker: number[] = [0, 0, 0, 0, 0];
   onCreate(options: any) {
     this.state = new PvPRoomState();
     this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
@@ -489,10 +490,10 @@ export class PvPRoom extends Room<PvPRoomState> {
 
   private sendHeroesDef(playerState: PlayerState)
   {
-    if (this.defHeroesData) {
-      this.defHeroesData.heroes
-        .filter((heroData: any) => this.listNameHeroDef.includes(heroData.heroName))
-        .forEach((heroData: any) => {
+    if (this.defHeroesData && this.listNameHeroDef) {
+      this.listNameHeroDef.forEach((heroName: string) => {
+        const heroData = this.defHeroesData.heroes.find((h: any) => h.heroName === heroName);
+        if (heroData) {
           const hero = new Hero();
           hero.heroName = heroData.heroName;
           hero.id = heroData.id;
@@ -506,8 +507,20 @@ export class PvPRoom extends Room<PvPRoomState> {
             hp: heroData.hp,
             damage: heroData.damage,
           });
-        });
+        }
+      });
     }
+  }
+
+  private sendDataAttacker()
+  {
+    const cannonId = Array.isArray(this.listIdAttacker) && this.listIdAttacker.length > 0
+      ? this.listIdAttacker[0]
+      : 0;
+
+    this.broadcast("OnSetDataAttacker", {
+      CannonId: cannonId
+    });
   }
 
   private sendInfoItemEvent(index: number, id: number, numSolider: number) {
@@ -863,17 +876,30 @@ export class PvPRoom extends Room<PvPRoomState> {
 
   private handlePlayerReady(client: Client, data: any) {
     const player = this.state.players.get(client.sessionId);
-    if (player) {
-      player.isReady = data.isReady;
-      player.name = data.nickname;
-      this.listNameHeroDef = data.listNameHeroDef;
-      console.log(`Player ${client.sessionId} ready status: ${data.isReady} with nickname: ${data.nickname}`);
-      if (this.state.players.size == 2)
-      {
-        this.sendHeroesDef(player);
+    if (!player) return;
+
+    console.log(`Player ${client.sessionId} ready status: ${data.isReady} with nickname: ${data.nickname}`);
+    player.isReady = data.isReady;
+    player.name = data.nickname;
+
+    if (this.state.players.size == 1) {
+      if (Array.isArray(data.listIdAttacker)) {
+        this.listIdAttacker = data.listIdAttacker;
+      } else {
+        this.listIdAttacker = [0, 0, 0, 0, 0];
       }
-      this.checkAllPlayersReady();
     }
+
+    if (this.state.players.size == 2) {
+      if (Array.isArray(data.listNameHeroDef)) {
+        this.listNameHeroDef = data.listNameHeroDef;
+      }
+
+      this.sendHeroesDef(player);
+      this.sendDataAttacker();
+    }
+
+    this.checkAllPlayersReady();
   }
 
   private spawnServerBoss(overrideHp?: number) {
