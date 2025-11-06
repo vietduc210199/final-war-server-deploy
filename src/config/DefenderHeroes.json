@@ -1,14 +1,14 @@
 {
   "heroes": [
-    { "heroName": "Mason", "id": 902, "hp": 100, "damage": 10 },
-    { "heroName": "Violet", "id": 900, "hp": 150, "damage": 20 },
-    { "heroName": "Farhad", "id": 901, "hp": 100, "damage": 10 },
-    { "heroName": "Monica", "id": 998, "hp": 150, "damage": 10 },
-    { "heroName": "Gump", "id": 999, "hp": 150, "damage": 10 },
-    { "heroName": "Loki", "id": 904, "hp": 150, "damage": 10 },
-    { "heroName": "Kimberly", "id": 907, "hp": 150, "damage": 10 },
-    { "heroName": "Cage", "id": 905, "hp": 150, "damage": 10 },
-    { "heroName": "Sarah", "id": 906, "hp": 150, "damage": 10 },
-    { "heroName": "Ambolt", "id": 903, "hp": 150, "damage": 10 }
+    { "heroName": "Mount", "id": 902, "hp": 100, "damage": 10 },
+    { "heroName": "Viper", "id": 900, "hp": 150, "damage": 20 },
+    { "heroName": "Hardpoint", "id": 901, "hp": 100, "damage": 10 },
+    { "heroName": "Elizabeth", "id": 998, "hp": 150, "damage": 10 },
+    { "heroName": "Torch", "id": 999, "hp": 150, "damage": 10 },
+    { "heroName": "Buck", "id": 904, "hp": 150, "damage": 10 },
+    { "heroName": "Ellie", "id": 907, "hp": 150, "damage": 10 },
+    { "heroName": "Skyguard", "id": 905, "hp": 150, "damage": 10 },
+    { "heroName": "Seraphine", "id": 906, "hp": 150, "damage": 10 },
+    { "heroName": "Javelin", "id": 903, "hp": 150, "damage": 10 }
   ]
 }

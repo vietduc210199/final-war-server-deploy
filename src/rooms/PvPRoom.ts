@@ -72,21 +72,44 @@ export class PvPRoom extends Room<PvPRoomState> {
   }
 
   onLeave(client: Client, consented: boolean) {
-    console.log(`Player ${client.sessionId} left PvP room!`);
+    if (!consented) {
+      console.log(`${client.sessionId} disconnected unexpectedly`);
+      this.broadcast("playerDisconnected", { sessionId: client.sessionId });
+      this.allowReconnection(client, 30)
+        .then((reconnectedClient) => {
+          console.log(`${client.sessionId} reconnected successfully`);
+          this.broadcast("playerReconnected", { sessionId: client.sessionId });
+        })
+        .catch(() => {
+          console.log(`${client.sessionId} failed to reconnect in time`);
+          this.handlePlayerLeftPermanently(client);
+        });
+
+      return;
+    }
+
+    console.log(`${client.sessionId} left the room voluntarily`);
+    this.handlePlayerLeftPermanently(client);
+  }
+
+  handlePlayerLeftPermanently(client: Client) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
 
     this.state.players.delete(client.sessionId);
 
-    if (this.state.players.size < 2) {
-      this.state.gameState = "waiting";
-      console.log("Game reset to waiting state - not enough players");
+    if (this.state.gameState === "playing") {
+      this.state.gameState = "finished";
+      this.broadcast("battleEnded", {
+        message: "Opponent has left.",
+        reason: "OpponentHasLeft",
+        playerType: player.role === "attacker" ? 1 : 0
+      });
+    }
 
-      // Auto dispose room when player leaves during game
-      if (this.state.players.size === 0) {
-        console.log("No players left, disposing room...");
-        setTimeout(() => {
-          this.disconnect();
-        }, 2000); // Dispose room after 2 seconds
-      }
+    if (this.state.players.size === 0) {
+      console.log("No players left, disposing room...");
+      this.disconnect();
     }
   }
 
@@ -122,7 +145,6 @@ export class PvPRoom extends Room<PvPRoomState> {
     });
 
     this.onMessage("AttackerSpawn", (client, data) => {
-      console.log("[qqqqqqqqqqqqqqqqqqqqqqqqqqq]")
       if (this.bossSpawned) {
         return;
       }
