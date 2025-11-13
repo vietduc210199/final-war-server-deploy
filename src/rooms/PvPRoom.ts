@@ -536,12 +536,14 @@ export class PvPRoom extends Room<PvPRoomState> {
 
   private sendDataAttacker()
   {
-    const cannonId = Array.isArray(this.listIdAttacker) && this.listIdAttacker.length > 0
-      ? this.listIdAttacker[0]
-      : 0;
+    const [cannonId = 0, soldierId = 0, soldierEliteId = 0, bossEliteId = 0, bossFinalId = 0] = Array.isArray(this.listIdAttacker) ? this.listIdAttacker : [];
 
-    this.broadcast("OnSetDataAttacker", {
-      CannonId: cannonId
+    this.broadcast("OnSetDataAttacker", { 
+      CannonId: cannonId,
+      SoldierId: soldierId,
+      SoldierEliteId: soldierEliteId,
+      BossEliteId: bossEliteId,
+      BossFinalId: bossFinalId
     });
   }
 
