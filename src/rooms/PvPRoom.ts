@@ -18,14 +18,12 @@ export class PvPRoom extends Room<PvPRoomState> {
   private activeBossTroopIndex: number | null = null;
   private awaitingSkillPoints: boolean = false;
   private skillPointTimeout: NodeJS.Timeout | null = null;
-  private listNameHeroDef: string[] = [];
   private listIdAttacker: number[] = [0, 0, 0, 0, 0];
   onCreate(options: any) {
     this.state = new PvPRoomState();
     this.state.mapId = Math.floor(Math.random() * (this.maxMapId + 1));
     // this.state.mapId = 5;
     this.levelData = this.loadLevelData();
-    this.defHeroesData = this.loadDefHeroesData();
     this.attackersData = this.loadAttackersData();
 
     // Set up message handlers
@@ -55,7 +53,7 @@ export class PvPRoom extends Room<PvPRoomState> {
       console.log(`Player ${client.sessionId} assigned role: Attacker`);
     } else {
       playerState.role = "defender";
-      this.initializeDefenderData(playerState);
+      this.initializeDefenderData(playerState, options.HeroesDefData);
       console.log(`Player ${client.sessionId} assigned role: Defender`);
     }
 
@@ -506,30 +504,26 @@ export class PvPRoom extends Room<PvPRoomState> {
     console.log(`Initialized ${playerState.attackerTroops.length} attacker troops for player ${playerState.name}`);
   }
 
-  private initializeDefenderData(playerState: PlayerState) {
+  private initializeDefenderData(playerState: PlayerState, heroesDefData: any) {
     console.log(`Initialized ${playerState.heroes.length} heroes and ${playerState.defenderTroops.length} defender troops for player ${playerState.name}`);
+    this.defHeroesData = heroesDefData;
   }
 
   private sendHeroesDef(playerState: PlayerState)
   {
-    if (this.defHeroesData && this.listNameHeroDef) {
-      this.listNameHeroDef.forEach((heroName: string) => {
-        const heroData = this.defHeroesData.heroes.find((h: any) => h.heroName === heroName);
-        if (heroData) {
-          const hero = new Hero();
-          hero.heroName = heroData.heroName;
-          hero.id = heroData.id;
-          hero.hp = heroData.hp;
-          hero.damage = heroData.damage;
-          playerState.heroes.push(hero);
+    if (this.defHeroesData) {
+      this.defHeroesData.slice(0, 5).forEach((heroData: any) => {
+        const hero = new Hero();
+        hero.id = heroData.id;
+        hero.hp = heroData.hp;
+        hero.damage = heroData.damage;
+        playerState.heroes.push(hero);
 
-          this.addHeroToDefender(playerState, {
-            heroName: heroData.heroName,
-            id: heroData.id,
-            hp: heroData.hp,
-            damage: heroData.damage,
-          });
-        }
+        this.addHeroToDefender(playerState, {
+          id: heroData.id,
+          hp: heroData.hp,
+          damage: heroData.damage,
+        });
       });
     }
   }
@@ -698,44 +692,6 @@ export class PvPRoom extends Room<PvPRoomState> {
     }
   }
 
-  private loadDefHeroesData(): any {
-    try {
-      // Try multiple possible paths for DefenderHeroes.json
-      const possiblePaths = [
-        path.join(__dirname, '../config/DefenderHeroes.json'),  // Development path
-        path.join(__dirname, '../../config/DefenderHeroes.json'), // Build path
-        path.join(process.cwd(), 'config/DefenderHeroes.json'),   // Current working directory
-        path.join(process.cwd(), 'src/config/DefenderHeroes.json') // Source directory
-      ];
-
-      let configPath = null;
-      for (const testPath of possiblePaths) {
-        if (fs.existsSync(testPath)) {
-          configPath = testPath;
-          console.log(`✅ Found DefenderHeroes.json at: ${configPath}`);
-          break;
-        }
-      }
-
-      if (!configPath) {
-        console.error(`DefenderHeroes.json not found in any of these locations:`);
-        possiblePaths.forEach(p => console.error(`  - ${p}`));
-        console.error(`Current working directory: ${process.cwd()}`);
-        console.error(`__dirname: ${__dirname}`);
-        return null;
-      }
-
-      const fileContent = fs.readFileSync(configPath, 'utf8');
-      const DefenderHeroes = JSON.parse(fileContent);
-
-      console.log(`✅ Loaded DefenderHeroes data: ${DefenderHeroes.heroes?.length || 0} heroes`);
-      return DefenderHeroes;
-    } catch (error) {
-      console.error('Failed to load DefenderHeroes data:', error);
-      return null;
-    }
-  }
-
   private loadAttackersData(): any {
     try {
       // Try multiple possible paths for Atackers.json
@@ -859,9 +815,8 @@ export class PvPRoom extends Room<PvPRoomState> {
     });
   }
 
-  private addHeroToDefender(playerState: PlayerState, heroData: { heroName: string; id: number; hp: number; damage: number }) {
+  private addHeroToDefender(playerState: PlayerState, heroData: { id: number; hp: number; damage: number }) {
     const hero = new Hero();
-    hero.heroName = heroData.heroName;
     hero.id = heroData.id;
     hero.hp = heroData.hp;
     hero.damage = heroData.damage;
@@ -869,7 +824,6 @@ export class PvPRoom extends Room<PvPRoomState> {
 
     this.broadcast("DefenderHeroAdded", {
       PlayerId: playerState.id,
-      HeroName: hero.heroName,
       Id: hero.id,
       HP: hero.hp,
       Damage: hero.damage,
@@ -915,10 +869,6 @@ export class PvPRoom extends Room<PvPRoomState> {
     }
 
     if (this.state.players.size == 2) {
-      if (Array.isArray(data.listNameHeroDef)) {
-        this.listNameHeroDef = data.listNameHeroDef;
-      }
-
       this.sendHeroesDef(player);
       this.sendDataAttacker();
     }
