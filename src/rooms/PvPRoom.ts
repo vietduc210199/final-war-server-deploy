@@ -517,12 +517,14 @@ export class PvPRoom extends Room<PvPRoomState> {
         hero.id = heroData.id;
         hero.hp = heroData.hp;
         hero.damage = heroData.damage;
+        hero.defense = heroData.defense || 0;
         playerState.heroes.push(hero);
 
         this.addHeroToDefender(playerState, {
           id: heroData.id,
           hp: heroData.hp,
           damage: heroData.damage,
+          defense: heroData.defense || 0,
         });
       });
     }
@@ -815,11 +817,12 @@ export class PvPRoom extends Room<PvPRoomState> {
     });
   }
 
-  private addHeroToDefender(playerState: PlayerState, heroData: { id: number; hp: number; damage: number }) {
+  private addHeroToDefender(playerState: PlayerState, heroData: { id: number; hp: number; damage: number; defense: number }) {
     const hero = new Hero();
     hero.id = heroData.id;
     hero.hp = heroData.hp;
     hero.damage = heroData.damage;
+    hero.defense = heroData.defense;
     playerState.heroes.push(hero);
 
     this.broadcast("DefenderHeroAdded", {
@@ -827,6 +830,7 @@ export class PvPRoom extends Room<PvPRoomState> {
       Id: hero.id,
       HP: hero.hp,
       Damage: hero.damage,
+      Defense: hero.defense,
       HeroIndex: playerState.heroes.length - 1,
     });
   }
